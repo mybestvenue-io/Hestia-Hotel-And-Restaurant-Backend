@@ -1,0 +1,32 @@
+{
+  "name": "navneethestia",
+  "version": "1.0.0",
+  "description": "hotelhestia",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "navneet"
+  ],
+  "author": "navneet",
+  "license": "ISC",
+  "dependencies": {
+    "@imagekit/nodejs": "^7.3.0",
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "ejs": "^3.1.10",
+    "express": "^5.2.1",
+    "imagekit": "^6.0.0",
+    "jsonwebtoken": "^8.5.1",
+    "mongoose": "^9.1.5",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.13",
+    "sharp": "^0.34.5"
+  }
+}

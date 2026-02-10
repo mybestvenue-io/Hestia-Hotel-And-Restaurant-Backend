@@ -1,0 +1,66 @@
+# Node dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.example
+.env.development
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+
+# Coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Cache
+.cache/
+.npm/
+
+# Uploads (if stored locally)
+uploads/
+
+# Image files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.svg
+*.ico
+
+# Temporary files
+tmp/
+temp/
+
+# Database files
+*.sqlite
+*.db
+
+# Docker
+docker-data/
