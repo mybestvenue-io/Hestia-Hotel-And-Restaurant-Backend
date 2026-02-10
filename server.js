@@ -37,6 +37,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Serve TinyMCE static files from node_modules. This is the robust way.
+app.use('/tinymce', express.static(path.dirname(require.resolve('tinymce'))));
 app.use(express.static(__dirname + '/public'));
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
