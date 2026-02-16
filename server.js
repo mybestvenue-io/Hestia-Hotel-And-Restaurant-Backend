@@ -50,12 +50,14 @@ const userRoutes = require('./routes/userRoutes');
 const hotelRoutes = require('./routes/hotelRoutes');
 const testImageRoutes = require('./routes/testImageRoutes');
 const blogRoutes = require('./routes/blogRoutes');
+const contentRoutes = require('./routes/contentRoutes');
 
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/hotel', hotelRoutes);
 app.use('/api/v1/test', testImageRoutes);
 app.use('/api/v1/blogs', blogRoutes);
+app.use('/api/v1/content', contentRoutes);
 
 app.get('/', (req, res) => res.json({ status: 'ok' }));
 
