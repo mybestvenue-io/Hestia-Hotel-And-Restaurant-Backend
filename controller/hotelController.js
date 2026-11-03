@@ -13,7 +13,7 @@ const registerHotel = async (req, res) => {
             profile_picture = uploadResult.url;
             
             // Log compression info
-            console.log(`Image compressed: ${uploadResult.originalSize} bytes -> ${uploadResult.compressedSize} bytes (${uploadResult.compressionRatio}% reduction)`);
+
         }
         
         const existingHotel = await Hotel.findOne({ email });

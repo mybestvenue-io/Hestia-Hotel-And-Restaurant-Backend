@@ -92,7 +92,7 @@ const hotelPropertySchema = new mongoose.Schema(
       rules: [{ type: String }],
     },
     contact: {
-      phone: { type: String, default: '+91 9058522279' },
+      phone: { type: String, default: '+91 8130622279' },
       email: { type: String, default: 'info@hestiahotels.com' },
       address: { type: String, default: '' },
     },

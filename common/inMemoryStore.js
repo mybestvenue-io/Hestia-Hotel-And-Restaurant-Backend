@@ -81,7 +81,7 @@ const defaultHotels = [
       ],
     },
     contact: {
-      phone: '+91 9058522279',
+      phone: '+91 8130622279',
       email: 'info@hestiahotels.com',
       address: 'Kasna Site 4, Near Oppo Factory, Greater Noida, Uttar Pradesh',
     },
@@ -165,7 +165,7 @@ const defaultHotels = [
       rules: ['Government approved photo ID required', 'Parties not allowed in guest rooms'],
     },
     contact: {
-      phone: '+91 9058522279',
+      phone: '+91 8130622279',
       email: 'info@hestiahotels.com',
       address: 'Knowledge Park III, Near Expo Centre, Greater Noida, Uttar Pradesh',
     },
@@ -235,7 +235,7 @@ const defaultHotels = [
       rules: ['Valid Gov ID proof required'],
     },
     contact: {
-      phone: '+91 9058522279',
+      phone: '+91 8130622279',
       email: 'info@hestiahotels.com',
       address: 'Sector 132, Expressway, Noida, Uttar Pradesh',
     },
@@ -300,7 +300,7 @@ const defaultHotels = [
       rules: ['Valid Passport or National ID required for check-in'],
     },
     contact: {
-      phone: '+91 9058522279',
+      phone: '+91 8130622279',
       email: 'info@hestiahotels.com',
       address: 'Sector 19B, Dwarka, New Delhi',
     },
