@@ -13,6 +13,11 @@ const blogSchema = new mongoose.Schema(
       required: false,
       default: null 
     },
+    authorName: { type: String, trim: true, default: 'Hestia Hotels Editorial' },
+    readTime: { type: String, trim: true, default: '4 min read' },
+    metaTitle: { type: String, trim: true, default: '' },
+    metaDescription: { type: String, trim: true, default: '' },
+    featured: { type: Boolean, default: false },
     category: { type: String, trim: true },
     tags: [{ type: String, trim: true }],
     published: { type: Boolean, default: false },
