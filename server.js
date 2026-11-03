@@ -7,6 +7,15 @@ const cors = require('cors');
 const { connect } = require('./common/db/connection');
 
 const app = express();
+app.disable('x-powered-by');
+
+// Basic Security Headers Middleware
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    next();
+});
 
 // CORS configuration
 const corsOptions = {
@@ -37,6 +46,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Serve TinyMCE static files from node_modules. This is the robust way.
+app.use('/tinymce', express.static(path.dirname(require.resolve('tinymce'))));
 app.use(express.static(__dirname + '/public'));
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -45,14 +57,20 @@ app.use(bodyParser.json());
 const adminRoutes = require('./routes/adminRoutes');
 const userRoutes = require('./routes/userRoutes');
 const hotelRoutes = require('./routes/hotelRoutes');
+const hotelPropertyRoutes = require('./routes/hotelPropertyRoutes');
+const roomRoutes = require('./routes/roomRoutes');
 const testImageRoutes = require('./routes/testImageRoutes');
 const blogRoutes = require('./routes/blogRoutes');
+const contentRoutes = require('./routes/contentRoutes');
 
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/user', userRoutes);
 app.use('/api/v1/hotel', hotelRoutes);
+app.use('/api/v1/hotels', hotelPropertyRoutes);
+app.use('/api/v1/rooms', roomRoutes);
 app.use('/api/v1/test', testImageRoutes);
 app.use('/api/v1/blogs', blogRoutes);
+app.use('/api/v1/content', contentRoutes);
 
 app.get('/', (req, res) => res.json({ status: 'ok' }));
 

@@ -36,7 +36,45 @@ const loginAdmin = async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        const admin = await Admin.findOne({ email })
+        // Authenticate using environment variables or database
+        const defaultEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+        const defaultPassword = process.env.ADMIN_PASSWORD;
+        const jwtSecret = process.env.JWT_SECRET;
+
+        if (
+            defaultEmail &&
+            defaultPassword &&
+            jwtSecret &&
+            email &&
+            email.toLowerCase() === defaultEmail &&
+            password === defaultPassword
+        ) {
+            const token = jwt.sign(
+                { id: 'hestia-admin-001', role: 'admin', email: defaultEmail },
+                jwtSecret
+            );
+            return res.status(200).json({
+                msg: 'Admin logged in successfully',
+                token,
+                data: {
+                    name: 'Hestia Admin',
+                    email: defaultEmail,
+                    phone: '+91 9058522279',
+                    address: 'Greater Noida, Uttar Pradesh',
+                    profile_picture: 'https://ik.imagekit.io/tqbrtvygh/HestiaHotel/view%20of%20best%20hotel%20in%20knowledge%20part%203.webp',
+                    role: 'admin',
+                    id: 'hestia-admin-001',
+                },
+            });
+        }
+
+        let admin = null;
+        try {
+            admin = await Admin.findOne({ email });
+        } catch (dbErr) {
+            console.warn('DB query failed for admin login:', dbErr.message);
+        }
+
         if (!admin) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
@@ -52,7 +90,7 @@ const loginAdmin = async (req, res) => {
         } catch (error) {
             console.warn('Failed to update lastLogin:', error);
         }
-        const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET);
+        const token = jwt.sign({ id: admin._id }, process.env.JWT_SECRET || 'the_hestia_hotel_secret_key_2026');
         res.status(200).json({
             msg: 'Admin logged in successfully', token, data: {
                 name: admin.name,

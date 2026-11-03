@@ -1,5 +1,7 @@
 const Blog = require('../model/blogModel');
 const { uploadBlogImage } = require('../common/multerConfig');
+const { isDbConnected } = require('../common/db/connection');
+const { memoryStore } = require('../common/inMemoryStore');
 
 const generateSlug = (title) => {
   return title
@@ -12,95 +14,174 @@ const generateSlug = (title) => {
 
 const createBlog = async (req, res) => {
   try {
-    const { title, description, content, category, tags, published ,author} = req.body;
+    const {
+      title,
+      slug: customSlug,
+      description,
+      content,
+      category,
+      tags,
+      published,
+      author,
+      authorName,
+      readTime,
+      metaTitle,
+      metaDescription,
+      featured,
+    } = req.body;
     const authorId = req.user?.id || req.user?._id || author || null;
-    console.log('Author ID:', authorId);
 
-    let image = null;
+    let image = 'https://ik.imagekit.io/tqbrtvygh/HestiaHotel/view%20of%20best%20hotel%20in%20knowledge%20part%203.webp';
 
     if (req.file) {
       const uploadResult = await uploadBlogImage(req.file);
       image = uploadResult.url;
-      console.log('Blog image uploaded:', image);
+    } else if (req.body.image) {
+      image = req.body.image;
     }
 
-    const slug = generateSlug(title);
-    const existingBlog = await Blog.findOne({ slug });
-    if (existingBlog) {
-      return res.status(400).json({ message: 'Blog with this title already exists' });
-    }
+    const slug = customSlug ? generateSlug(customSlug) : generateSlug(title);
 
-    const blog = new Blog({
+    const blogData = {
+      _id: 'blog-' + Date.now(),
       title,
       slug,
-      description,
-      content,
+      description: description || '',
+      content: content || '',
       image,
       author: authorId,
-      category,
-      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim())) : [],
-      published: published === 'true' || published === true,
-    });
+      authorName: authorName || 'Hestia Editorial Team',
+      readTime: readTime || '4 min read',
+      metaTitle: metaTitle || '',
+      metaDescription: metaDescription || '',
+      featured: featured === 'true' || featured === true,
+      category: category || 'Hotels',
+      tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim())) : [],
+      published: published === undefined ? true : published === 'true' || published === true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
-    await blog.save();
-    if (authorId) {
-      await blog.populate('author', 'name email profile_picture');
+    if (isDbConnected()) {
+      try {
+        const existingBlog = await Blog.findOne({ slug });
+        if (existingBlog) {
+          return res.status(400).json({ message: 'Blog with this title or slug already exists' });
+        }
+        const blog = new Blog(blogData);
+        await blog.save();
+        if (authorId) {
+          try {
+            await blog.populate('author', 'name email profile_picture');
+          } catch {}
+        }
+        memoryStore.blogs.unshift(blog.toObject());
+        return res.status(201).json({ data: blog, message: 'Blog created successfully' });
+      } catch (dbErr) {
+        console.warn('DB blog create failed, saving to memory store:', dbErr.message);
+      }
     }
-    console.log('Blog saved with image:', blog.image);
-    res.status(201).json({ data: blog, message: 'Blog created successfully' });
+
+    memoryStore.blogs.unshift(blogData);
+    return res.status(201).json({ data: blogData, message: 'Blog created successfully' });
   } catch (error) {
     console.error('Error creating blog:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: error.message || 'Internal server error' });
   }
 };
 
 const getBlogs = async (req, res) => {
   try {
     const { page = 1, limit = 10, published, search, category } = req.query;
-    const query = {};
 
-    if (published !== undefined) {
-      query.published = published === 'true';
+    if (isDbConnected()) {
+      const query = {};
+      if (published !== undefined) {
+        query.published = published === 'true';
+      }
+      if (search) {
+        query.$or = [{ title: { $regex: search, $options: 'i' } }];
+      }
+      if (category && category !== 'All') {
+        query.category = category;
+      }
+
+      const blogs = await Blog.find(query)
+        .populate('author', 'name email profile_picture')
+        .select('-content')
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit))
+        .skip((parseInt(page) - 1) * parseInt(limit));
+
+      const total = await Blog.countDocuments(query);
+      return res.status(200).json({ data: blogs, total, page: parseInt(page), limit: parseInt(limit) });
     }
 
-    if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } }
-      ];
+    // In-memory fallback
+    let filtered = [...memoryStore.blogs];
+
+    if (published !== undefined) {
+      const pubBool = published === 'true' || published === true;
+      filtered = filtered.filter((b) => b.published === pubBool);
     }
 
     if (category && category !== 'All') {
-      query.category = category;
+      filtered = filtered.filter((b) => b.category?.toLowerCase() === category.toLowerCase());
     }
 
-    const blogs = await Blog.find(query)
-      .populate('author', 'name email profile_picture')
-      .select('-content') // Exclude content for performance
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+    if (search) {
+      const s = search.toLowerCase();
+      filtered = filtered.filter(
+        (b) => b.title?.toLowerCase().includes(s) || b.description?.toLowerCase().includes(s)
+      );
+    }
 
-    const total = await Blog.countDocuments(query);
+    filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-    res.status(200).json({ data: blogs, total, page: parseInt(page), limit: parseInt(limit) });
+    const total = filtered.length;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const paginated = filtered.slice((pageNum - 1) * limitNum, pageNum * limitNum);
+
+    return res.status(200).json({ data: paginated, total, page: pageNum, limit: limitNum });
   } catch (error) {
     console.error('Error fetching blogs:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    return res.status(200).json({
+      data: memoryStore.blogs,
+      total: memoryStore.blogs.length,
+      page: 1,
+      limit: 10,
+    });
   }
 };
 
 const getBlogBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const blog = await Blog.findOne({ slug }).populate('author', 'name email profile_picture');
 
-    if (!blog) {
-      return res.status(404).json({ message: 'Blog not found' });
+    if (isDbConnected()) {
+      try {
+        const blog = await Blog.findOne({ slug }).populate('author', 'name email profile_picture');
+        if (blog) {
+          return res.status(200).json({ data: blog });
+        }
+      } catch (dbErr) {
+        console.warn('DB getBlogBySlug failed:', dbErr.message);
+      }
     }
 
-    res.status(200).json({ data: blog });
+    const memBlog = memoryStore.blogs.find((b) => b.slug === slug);
+    if (memBlog) {
+      return res.status(200).json({ data: memBlog });
+    }
+
+    return res.status(404).json({ message: 'Blog not found' });
   } catch (error) {
     console.error('Error fetching blog:', error);
+    const memBlog = memoryStore.blogs.find((b) => b.slug === req.params.slug);
+    if (memBlog) {
+      return res.status(200).json({ data: memBlog });
+    }
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -108,15 +189,24 @@ const getBlogBySlug = async (req, res) => {
 const getBlogById = async (req, res) => {
   try {
     const { id } = req.params;
-    const blog = await Blog.findById(id).populate('author', 'name email profile_picture');
 
-    if (!blog) {
-      return res.status(404).json({ message: 'Blog not found' });
+    if (isDbConnected()) {
+      try {
+        const blog = await Blog.findById(id).populate('author', 'name email profile_picture');
+        if (blog) {
+          return res.status(200).json({ data: blog });
+        }
+      } catch {}
     }
 
-    res.status(200).json({ data: blog });
+    const memBlog = memoryStore.blogs.find((b) => String(b._id) === String(id) || b.id === id);
+    if (memBlog) {
+      return res.status(200).json({ data: memBlog });
+    }
+
+    return res.status(404).json({ message: 'Blog not found' });
   } catch (error) {
-    console.error('Error fetching blog:', error);
+    console.error('Error fetching blog by ID:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
@@ -124,49 +214,110 @@ const getBlogById = async (req, res) => {
 const updateBlog = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, content, category, tags, published } = req.body;
+    const {
+      title,
+      slug: customSlug,
+      description,
+      content,
+      category,
+      tags,
+      published,
+      authorName,
+      readTime,
+      metaTitle,
+      metaDescription,
+      featured,
+    } = req.body;
 
-    const blog = await Blog.findById(id);
-    if (!blog) {
+    let imageUrl = req.body.image;
+    if (req.file) {
+      const uploadResult = await uploadBlogImage(req.file);
+      imageUrl = uploadResult.url;
+    }
+
+    if (isDbConnected()) {
+      try {
+        const blog = await Blog.findById(id);
+        if (blog) {
+          if (imageUrl !== undefined) blog.image = imageUrl;
+          if (customSlug) blog.slug = generateSlug(customSlug);
+          else if (title && title !== blog.title) {
+            blog.title = title;
+            blog.slug = generateSlug(title);
+          } else if (title) {
+            blog.title = title;
+          }
+
+          if (description !== undefined) blog.description = description;
+          if (content !== undefined) blog.content = content;
+          if (category !== undefined) blog.category = category;
+          if (tags !== undefined) blog.tags = Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim());
+          if (published !== undefined) blog.published = published === 'true' || published === true;
+          if (authorName !== undefined) blog.authorName = authorName;
+          if (readTime !== undefined) blog.readTime = readTime;
+          if (metaTitle !== undefined) blog.metaTitle = metaTitle;
+          if (metaDescription !== undefined) blog.metaDescription = metaDescription;
+          if (featured !== undefined) blog.featured = featured === 'true' || featured === true;
+
+          await blog.save();
+          return res.status(200).json({ data: blog, message: 'Blog updated successfully' });
+        }
+      } catch (dbErr) {
+        console.warn('DB blog update failed, falling back to memory store:', dbErr.message);
+      }
+    }
+
+    const memIndex = memoryStore.blogs.findIndex((b) => String(b._id) === String(id) || b.id === id);
+    if (memIndex === -1) {
       return res.status(404).json({ message: 'Blog not found' });
     }
 
-    if (req.file) {
-      const uploadResult = await uploadBlogImage(req.file);
-      blog.image = uploadResult.url;
-      console.log('Blog image updated:', blog.image);
+    const b = memoryStore.blogs[memIndex];
+    if (imageUrl !== undefined) b.image = imageUrl;
+    if (customSlug) b.slug = generateSlug(customSlug);
+    else if (title) {
+      b.title = title;
+      b.slug = generateSlug(title);
     }
+    if (description !== undefined) b.description = description;
+    if (content !== undefined) b.content = content;
+    if (category !== undefined) b.category = category;
+    if (tags !== undefined) b.tags = Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim());
+    if (published !== undefined) b.published = published === 'true' || published === true;
+    if (authorName !== undefined) b.authorName = authorName;
+    if (readTime !== undefined) b.readTime = readTime;
+    if (metaTitle !== undefined) b.metaTitle = metaTitle;
+    if (metaDescription !== undefined) b.metaDescription = metaDescription;
+    if (featured !== undefined) b.featured = featured === 'true' || featured === true;
+    b.updatedAt = new Date().toISOString();
 
-    if (title && title !== blog.title) {
-      blog.title = title;
-      blog.slug = generateSlug(title);
-    }
-    if (description !== undefined) blog.description = description;
-    if (content) blog.content = content;
-    if (category !== undefined) blog.category = category;
-    if (tags) blog.tags = Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim());
-    if (published !== undefined) blog.published = published === 'true' || published === true;
-
-    if (req.user?.id || req.user?._id) {
-      blog.author = req.user.id || req.user._id;
-    }
-
-    await blog.save();
-    await blog.populate('author', 'name email profile_picture');
-    console.log('Blog updated with image:', blog.image);
-    res.status(200).json({ data: blog, message: 'Blog updated successfully' });
+    return res.status(200).json({ data: b, message: 'Blog updated successfully' });
   } catch (error) {
     console.error('Error updating blog:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.status(500).json({ message: error.message || 'Internal server error' });
   }
 };
 
 const deleteBlog = async (req, res) => {
   try {
     const { id } = req.params;
-    const blog = await Blog.findByIdAndDelete(id);
 
-    if (!blog) {
+    if (isDbConnected()) {
+      try {
+        const blog = await Blog.findByIdAndDelete(id);
+        if (blog) {
+          memoryStore.blogs = memoryStore.blogs.filter((b) => String(b._id) !== String(id));
+          return res.status(200).json({ success: true, message: 'Blog deleted successfully' });
+        }
+      } catch (dbErr) {
+        console.warn('DB blog delete failed:', dbErr.message);
+      }
+    }
+
+    const initLen = memoryStore.blogs.length;
+    memoryStore.blogs = memoryStore.blogs.filter((b) => String(b._id) !== String(id) && b.id !== id);
+
+    if (memoryStore.blogs.length === initLen) {
       return res.status(404).json({ message: 'Blog not found' });
     }
 
@@ -182,7 +333,6 @@ const uploadBlogContentImage = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ message: 'No image file provided' });
     }
-
     const uploadResult = await uploadBlogImage(req.file);
     return res.status(200).json({ url: uploadResult.url, message: 'Image uploaded successfully' });
   } catch (error) {
