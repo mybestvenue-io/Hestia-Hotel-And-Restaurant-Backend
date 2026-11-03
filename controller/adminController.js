@@ -59,7 +59,7 @@ const loginAdmin = async (req, res) => {
                 data: {
                     name: 'Hestia Admin',
                     email: defaultEmail,
-                    phone: '+91 9058522279',
+                    phone: '+91 8130622279',
                     address: 'Greater Noida, Uttar Pradesh',
                     profile_picture: 'https://ik.imagekit.io/tqbrtvygh/HestiaHotel/view%20of%20best%20hotel%20in%20knowledge%20part%203.webp',
                     role: 'admin',

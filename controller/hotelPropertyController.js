@@ -252,7 +252,7 @@ const createHotel = async (req, res) => {
         rules: [],
       }),
       contact: parseJsonSafely(contact, {
-        phone: '+91 9058522279',
+        phone: '+91 8130622279',
         email: 'info@hestiahotels.com',
         address: '',
       }),
