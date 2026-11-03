@@ -388,8 +388,8 @@ const editAdminProfile = async (req, res) => {
     if (req.file) {
       try {
         const uploadResult = await uploadProfileImage(req.file);
-        console.log('Upload result:', uploadResult);
-        console.log('Full URL:', uploadResult.url);
+
+
         payload.profile_picture = uploadResult.url;
       } catch (error) {
         console.error('Error uploading profile image:', error);
