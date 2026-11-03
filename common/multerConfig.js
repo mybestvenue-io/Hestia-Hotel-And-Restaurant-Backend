@@ -22,8 +22,8 @@ const upload = multer({
     limits: { 
         fileSize: 5 * 1024 * 1024, // 5MB file limit
         fieldSize: 10 * 1024 * 1024, // 10MB field size limit (for rich blog content)
-        fields: 20, // Maximum number of non-file fields
-        parts: 30 // Maximum number of parts (fields + files)
+        fields: 100, // Maximum number of non-file fields (allows complex hotel and room forms)
+        parts: 120 // Maximum number of parts (fields + files)
     },
     fileFilter: fileFilter
 });

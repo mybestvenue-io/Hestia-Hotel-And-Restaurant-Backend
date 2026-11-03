@@ -184,18 +184,30 @@ const createRoom = async (req, res) => {
     let resolvedHotelSlug = hotelSlug || 'all';
     let resolvedHotelId = hotelId || null;
 
-    if (resolvedHotelSlug && resolvedHotelSlug !== 'all' && !hotelName) {
-      const memH = memoryStore.hotels.find((h) => h.slug === resolvedHotelSlug);
-      if (memH) {
-        resolvedHotelName = memH.name;
-        resolvedHotelId = memH._id;
+    if (resolvedHotelSlug && resolvedHotelSlug !== 'all') {
+      let foundH = null;
+      if (isDbConnected()) {
+        try {
+          foundH = await HotelProperty.findOne({ slug: resolvedHotelSlug });
+        } catch {}
+      }
+      if (!foundH) {
+        foundH = memoryStore.hotels.find((h) => h.slug === resolvedHotelSlug);
+      }
+      if (foundH) {
+        resolvedHotelName = foundH.name;
+        resolvedHotelId = foundH._id;
       }
     }
 
-    const roomData = {
-      _id: 'room-' + Date.now(),
-      name,
-      hotelId: resolvedHotelId,
+    // Ensure resolvedHotelId is a valid ObjectId for MongoDB reference
+    const validMongoHotelId = (resolvedHotelId && /^[0-9a-fA-F]{24}$/.test(String(resolvedHotelId)))
+      ? resolvedHotelId
+      : null;
+
+    const roomPayload = {
+      name: name.trim(),
+      hotelId: validMongoHotelId,
       hotelSlug: resolvedHotelSlug,
       hotelName: resolvedHotelName,
       roomType: roomType || 'Deluxe Room',
@@ -214,22 +226,28 @@ const createRoom = async (req, res) => {
       status: status || 'available',
       isFeatured: isFeatured === undefined ? true : isFeatured === 'true' || isFeatured === true,
       order: order ? Number(order) : 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
     if (isDbConnected()) {
       try {
-        const createdRoom = await Room.create(roomData);
+        const createdRoom = await Room.create(roomPayload);
         memoryStore.rooms.unshift(createdRoom.toObject());
         return res.status(201).json({ success: true, data: createdRoom, message: 'Room created successfully' });
       } catch (dbErr) {
-        console.warn('DB room create failed, persisting to memory store:', dbErr.message);
+        console.error('DB room create error:', dbErr);
+        return res.status(400).json({ success: false, message: dbErr.message || 'Failed to save room to database' });
       }
     }
 
-    memoryStore.rooms.unshift(roomData);
-    return res.status(201).json({ success: true, data: roomData, message: 'Room created successfully' });
+    // Offline in-memory fallback
+    const memRoom = {
+      ...roomPayload,
+      _id: 'room-' + Date.now(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    memoryStore.rooms.unshift(memRoom);
+    return res.status(201).json({ success: true, data: memRoom, message: 'Room created successfully' });
   } catch (error) {
     console.error('Error creating room:', error);
     res.status(500).json({ success: false, message: error.message || 'Internal server error' });
@@ -271,11 +289,16 @@ const updateRoom = async (req, res) => {
 
     if (isDbConnected()) {
       try {
-        const room = await Room.findById(id);
+        let room = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+          room = await Room.findById(id);
+        }
         if (room) {
-          if (imageUrl !== undefined) room.image = imageUrl;
-          if (name) room.name = name;
-          if (hotelId !== undefined) room.hotelId = hotelId || null;
+          if (imageUrl !== undefined && imageUrl !== '') room.image = imageUrl;
+          if (name) room.name = name.trim();
+          if (hotelId !== undefined) {
+            room.hotelId = (hotelId && /^[0-9a-fA-F]{24}$/.test(String(hotelId))) ? hotelId : null;
+          }
           if (hotelSlug !== undefined) room.hotelSlug = hotelSlug;
           if (hotelName !== undefined) room.hotelName = hotelName;
           if (roomType !== undefined) room.roomType = roomType;
@@ -296,10 +319,15 @@ const updateRoom = async (req, res) => {
           if (features !== undefined) room.features = parseJsonSafely(features, room.features);
 
           await room.save();
+          const memIdx = memoryStore.rooms.findIndex((r) => String(r._id) === String(room._id));
+          if (memIdx !== -1) {
+            memoryStore.rooms[memIdx] = room.toObject();
+          }
           return res.status(200).json({ success: true, data: room, message: 'Room updated successfully' });
         }
       } catch (dbErr) {
-        console.warn('DB update room failed, attempting memory store update:', dbErr.message);
+        console.error('DB update room error:', dbErr);
+        return res.status(400).json({ success: false, message: dbErr.message || 'Failed to update room in database' });
       }
     }
 
@@ -346,13 +374,17 @@ const deleteRoom = async (req, res) => {
 
     if (isDbConnected()) {
       try {
-        const room = await Room.findByIdAndDelete(id);
+        let room = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+          room = await Room.findByIdAndDelete(id);
+        }
         if (room) {
           memoryStore.rooms = memoryStore.rooms.filter((r) => String(r._id) !== String(id));
           return res.status(200).json({ success: true, message: 'Room deleted successfully' });
         }
       } catch (dbErr) {
-        console.warn('DB delete room failed, attempting memory store delete:', dbErr.message);
+        console.error('DB delete room error:', dbErr);
+        return res.status(400).json({ success: false, message: dbErr.message || 'Failed to delete room' });
       }
     }
 

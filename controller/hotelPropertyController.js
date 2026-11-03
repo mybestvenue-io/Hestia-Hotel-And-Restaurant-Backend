@@ -214,9 +214,8 @@ const createHotel = async (req, res) => {
       imageUrl = uploadRes.url;
     }
 
-    const hotelData = {
-      _id: 'hotel-' + Date.now(),
-      name,
+    const hotelPayload = {
+      name: name.trim(),
       slug,
       subtitle: subtitle || '',
       description: description || '',
@@ -261,27 +260,34 @@ const createHotel = async (req, res) => {
       seo: parseJsonSafely(seo, { metaTitle: '', metaDescription: '' }),
       isActive: isActive === undefined ? true : isActive === 'true' || isActive === true,
       order: order ? Number(order) : 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
     };
 
     if (isDbConnected()) {
       try {
-        const existing = await HotelProperty.findOne({ slug });
-        if (existing) {
-          return res.status(400).json({ success: false, message: 'Hotel with this name or slug already exists' });
+        let counter = 1;
+        while (await HotelProperty.findOne({ slug })) {
+          slug = `${generateSlug(customSlug || name)}-${counter++}`;
         }
-        const createdHotel = await HotelProperty.create(hotelData);
+        hotelPayload.slug = slug;
+
+        const createdHotel = await HotelProperty.create(hotelPayload);
         memoryStore.hotels.unshift(createdHotel.toObject());
         return res.status(201).json({ success: true, data: createdHotel, message: 'Hotel property created successfully' });
       } catch (dbErr) {
-        console.warn('DB create failed, writing to memory store:', dbErr.message);
+        console.error('DB hotel create error:', dbErr);
+        return res.status(400).json({ success: false, message: dbErr.message || 'Failed to save hotel to database' });
       }
     }
 
-    // In-memory store
-    memoryStore.hotels.unshift(hotelData);
-    return res.status(201).json({ success: true, data: hotelData, message: 'Hotel property created successfully' });
+    // In-memory store fallback when MongoDB is not connected
+    const memHotel = {
+      ...hotelPayload,
+      _id: 'hotel-' + Date.now(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    memoryStore.hotels.unshift(memHotel);
+    return res.status(201).json({ success: true, data: memHotel, message: 'Hotel property created successfully' });
   } catch (error) {
     console.error('Error creating hotel:', error);
     res.status(500).json({ success: false, message: error.message || 'Internal server error' });
@@ -325,10 +331,16 @@ const updateHotel = async (req, res) => {
 
     if (isDbConnected()) {
       try {
-        const hotel = await HotelProperty.findById(id);
+        let hotel = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+          hotel = await HotelProperty.findById(id);
+        }
+        if (!hotel) {
+          hotel = await HotelProperty.findOne({ slug: id });
+        }
         if (hotel) {
-          if (imageUrl !== undefined) hotel.image = imageUrl;
-          if (name) hotel.name = name;
+          if (imageUrl !== undefined && imageUrl !== '') hotel.image = imageUrl;
+          if (name) hotel.name = name.trim();
           if (customSlug) hotel.slug = generateSlug(customSlug);
           if (subtitle !== undefined) hotel.subtitle = subtitle;
           if (description !== undefined) hotel.description = description;
@@ -352,10 +364,15 @@ const updateHotel = async (req, res) => {
           if (seo !== undefined) hotel.seo = parseJsonSafely(seo, hotel.seo);
 
           await hotel.save();
+          const memIdx = memoryStore.hotels.findIndex((h) => String(h._id) === String(hotel._id) || h.slug === hotel.slug);
+          if (memIdx !== -1) {
+            memoryStore.hotels[memIdx] = hotel.toObject();
+          }
           return res.status(200).json({ success: true, data: hotel, message: 'Hotel updated successfully' });
         }
       } catch (dbErr) {
-        console.warn('DB update failed, attempting memory store update:', dbErr.message);
+        console.error('DB update failed:', dbErr);
+        return res.status(400).json({ success: false, message: dbErr.message || 'Failed to update hotel property in database' });
       }
     }
 
@@ -405,13 +422,19 @@ const deleteHotel = async (req, res) => {
 
     if (isDbConnected()) {
       try {
-        const hotel = await HotelProperty.findByIdAndDelete(id);
+        let hotel = null;
+        if (/^[0-9a-fA-F]{24}$/.test(id)) {
+          hotel = await HotelProperty.findByIdAndDelete(id);
+        } else {
+          hotel = await HotelProperty.findOneAndDelete({ slug: id });
+        }
         if (hotel) {
-          memoryStore.hotels = memoryStore.hotels.filter((h) => String(h._id) !== String(id));
+          memoryStore.hotels = memoryStore.hotels.filter((h) => String(h._id) !== String(id) && h.slug !== id);
           return res.status(200).json({ success: true, message: 'Hotel property deleted successfully' });
         }
       } catch (dbErr) {
-        console.warn('DB delete failed, attempting memory store delete:', dbErr.message);
+        console.error('DB delete failed:', dbErr);
+        return res.status(400).json({ success: false, message: dbErr.message || 'Failed to delete hotel property' });
       }
     }
 

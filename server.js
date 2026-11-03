@@ -87,6 +87,17 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Global error handling middleware (handles Multer errors and uncaught route exceptions as JSON)
+app.use((err, req, res, next) => {
+    if (err && err.name === 'MulterError') {
+        return res.status(400).json({ success: false, message: `Upload error: ${err.message}` });
+    }
+    if (err) {
+        return res.status(500).json({ success: false, message: err.message || 'Internal server error' });
+    }
+    next();
+});
+
 async function start() {
     await connect();
     app.listen(port, '0.0.0.0', () => console.log(`Server started on port ${port}`));
